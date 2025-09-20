@@ -1,251 +1,521 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Resume Analyzer Dashboard</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 20px;
-            transition: background-color 0.3s, color 0.3s;
-        }
-        .dark-mode {
-            background-color: #1a1a1a;
-            color: #ffffff;
-        }
-        .container {
-            max-width: 1200px;
-            margin: auto;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 20px;
-        }
-        th, td {
-            border: 1px solid #ddd;
-            padding: 8px;
-            text-align: left;
-        }
-        th {
-            background-color: #f2f2f2;
-            cursor: pointer;
-        }
-        .dark-mode th {
-            background-color: #333;
-        }
-        canvas {
-            max-width: 100%;
-            margin-top: 20px;
-        }
-        .error {
-            color: red;
-            margin-top: 10px;
-        }
-        .loading {
-            display: none;
-            margin-top: 10px;
-        }
-    </style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AI Resume Analyzer — Modern Dashboard</title>
+
+  <!-- Tailwind CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <style>
+    /* Custom transitions */
+    .fade-in { animation: fadeIn 0.5s ease forwards; opacity: 0 }
+    @keyframes fadeIn { to { opacity: 1 } }
+
+    /* Skeleton loader */
+    .skeleton { background: linear-gradient(90deg, #e5e7eb 25%, #f3f4f6 37%, #e5e7eb 63%); background-size: 400% 100%; animation: skeleton-loading 1.4s ease-in-out infinite; }
+    @keyframes skeleton-loading { 0% { background-position: 200% 0 } 100% { background-position: -200% 0 } }
+
+    /* Enhanced glass effect */
+    .glass { background: linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0.05)); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+
+    /* Focus outline */
+    :focus { outline: 2px solid rgba(99,102,241,0.3); outline-offset: 2px; }
+
+    /* Button transitions */
+    button { transition: background-color 0.3s ease, transform 0.2s ease; }
+    button:hover { transform: translateY(-1px); }
+    button:active { transform: translateY(0); }
+
+    /* Dark mode overrides */
+    .dark .glass { background: linear-gradient(135deg, rgba(30,41,59,0.2), rgba(30,41,59,0.1)); border: 1px solid rgba(255,255,255,0.15); }
+    .dark .skeleton { background: linear-gradient(90deg, #2d3748 25%, #4a5568 37%, #2d3748 63%); }
+
+    /* Highlight search matches */
+    .highlight { background-color: #fef08a; color: #1f2937; }
+    .dark .highlight { background-color: #a3e635; color: #1f2937; }
+
+    /* Progress bar animation */
+    .progress-bar { transition: width 0.5s ease-in-out; }
+  </style>
 </head>
-<body>
-    <div class="container">
-        <h1>AI Resume Analyzer Dashboard</h1>
-        <button onclick="toggleDarkMode()">Toggle Dark Mode</button>
-        
-        <h2>Upload Resumes</h2>
-        <form id="uploadForm" enctype="multipart/form-data">
-            <select name="job_role" id="jobRole">
-                <option value="GenAI Engineer">GenAI Engineer</option>
-                <option value="LLM Engineer">LLM Engineer</option>
-                <option value="Data Scientist">Data Scientist</option>
-            </select>
-            <input type="file" name="resumes" multiple accept=".pdf,.doc,.docx">
-            <button type="submit">Upload Resumes</button>
-        </form>
-        <div id="uploadStatus"></div>
-        
-        <h2>Candidates</h2>
-        <button onclick="refreshCandidates()">Refresh Candidates</button>
-        <div id="loading" class="loading">Loading candidates...</div>
-        <div id="error" class="error"></div>
-        <table id="candidateTable">
-            <thead>
+<body class="bg-white dark:bg-black text-black dark:text-white min-h-screen font-sans">
+  <div class="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
+    <header class="flex flex-col sm:flex-row items-center justify-between gap-4 mb-8">
+      <div class="flex items-center gap-4">
+        <div class="w-12 h-12 rounded-xl bg-gradient-to-tr from-indigo-600 to-emerald-500 flex items-center justify-center text-white font-bold text-lg shadow-lg">AI</div>
+        <div>
+          <h1 class="text-2xl sm:text-3xl font-bold tracking-tight">AI Resume Analyzer</h1>
+          <p class="text-sm text-gray-500 dark:text-gray-400">Smart candidate scoring & quick insights</p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-3 flex-wrap">
+        <label class="flex items-center gap-2 bg-white/90 dark:bg-gray-800/90 glass px-3 py-2 rounded-lg shadow-sm">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-gray-600 dark:text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+          <select id="jobRole" class="bg-black text-sm focus:outline-none text-black dark:text-white">
+            <option selected disabled>Select a job role</option>
+            <option>GenAI Engineer</option>
+            <option>LLM Engineer</option>
+            <option>Data Scientist</option>
+          </select>
+        </label>
+        <button id="darkToggle" class="px-3 py-2 rounded-lg bg-white/90 dark:bg-gray-800/90 glass shadow-sm text-sm hover:bg-indigo-100 dark:hover:bg-indigo-900"></button>
+        <!-- Relocated Export Section -->
+        <div class="flex gap-3">
+          <button onclick="exportTo('pdf')" class="px-4 py-2 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-sm hover:bg-gray-100 dark:hover:bg-gray-700">Export PDF</button>
+          <button onclick="exportTo('csv')" class="px-4 py-2 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-sm hover:bg-gray-100 dark:hover:bg-gray-700">Export CSV</button>
+        </div>
+      </div>
+    </header>
+
+    <main class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <!-- Left column: Upload + chat -->
+      <section class="space-y-6 md:col-span-1">
+        <div class="p-5 rounded-xl glass shadow-sm">
+          <h2 class="font-semibold text-lg">Upload Resumes</h2>
+          <p class="text-sm text-gray-500 dark:text-gray-400">Drag & drop or select multiple files (.pdf, .docx)</p>
+
+          <form id="uploadForm" class="mt-4">
+            <div id="dropArea" class="border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-lg p-6 text-center cursor-pointer hover:border-indigo-400 dark:hover:border-indigo-500 transition">
+              <div id="dropContent" class="flex flex-col items-center gap-3">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-indigo-500 dark:text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 15a4 4 0 004 4h10a4 4 0 000-8 4 4 0 00-3.46 1.84"/></svg>
+                <p class="text-sm text-gray-600 dark:text-gray-300">Drop files here or <span class="text-indigo-600 dark:text-indigo-400 underline">browse</span></p>
+                <input id="fileInput" name="resumes" type="file" accept=".pdf,.doc,.docx" multiple class="sr-only">
+              </div>
+            </div>
+
+            <div id="fileList" class="mt-4 space-y-2"></div>
+
+            <div class="mt-4 flex gap-3">
+              <button id="uploadBtn" type="submit" class="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm shadow hover:bg-indigo-700 dark:hover:bg-indigo-500">Upload</button>
+              <button id="clearBtn" type="button" class="px-4 py-2 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-sm hover:bg-gray-100 dark:hover:bg-gray-700">Clear</button>
+            </div>
+
+            <div id="uploadStatus" class="mt-4 text-sm text-gray-600 dark:text-gray-300"></div>
+            <div id="uploadProgress" class="mt-4 space-y-3"></div>
+          </form>
+        </div>
+
+        <div class="p-5 rounded-xl glass shadow-sm">
+          <h2 class="font-semibold text-lg">Chat with Analyzer</h2>
+          <p class="text-sm text-gray-500 dark:text-gray-400">Ask questions about candidates in a conversational way.</p>
+          <div id="chatMessages" class="mt-4 max-h-64 overflow-y-auto space-y-3 p-2 border border-gray-200 dark:border-gray-700 rounded-lg"></div>
+          <div class="mt-4 flex gap-3">
+            <input id="chatQuery" class="flex-1 rounded-lg px-4 py-2 border border-gray-200 dark:border-gray-700 focus:border-indigo-400 dark:focus:border-indigo-500 bg-white dark:bg-gray-800 text-sm text-black dark:text-white" placeholder="e.g., Who's the best candidate for GenAI?">
+            <button id="askBtn" class="px-4 py-2 rounded-lg bg-emerald-500 text-white text-sm hover:bg-emerald-600 dark:hover:bg-emerald-400">Send</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Right column: Candidates table + visualization -->
+      <section class="space-y-6 md:col-span-1 lg:col-span-2">
+        <div class="p-5 rounded-xl glass shadow-sm">
+          <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 gap-4">
+            <h2 class="font-semibold text-lg">Candidates</h2>
+            <div class="flex items-center gap-3 flex-wrap">
+              <input id="search" placeholder="Search name, skills..." class="px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 text-sm bg-white dark:bg-gray-800 focus:border-indigo-400 dark:focus:border-indigo-500 text-black dark:text-white w-full sm:w-auto" />
+              <button id="refreshBtn" class="px-4 py-2 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-sm hover:bg-gray-100 dark:hover:bg-gray-700">Delete all the Candidates</button>
+            </div>
+          </div>
+
+          <div id="loading" class="flex items-center gap-3 text-sm text-gray-500 dark:text-gray-400 hidden">
+            <div class="w-5 h-5 rounded-full animate-spin border-2 border-t-transparent border-gray-300 dark:border-gray-600"></div>
+            Loading candidates...
+          </div>
+
+          <div id="error" class="text-sm text-red-500 dark:text-red-400 mt-2 hidden"></div>
+
+          <div class="overflow-x-auto mt-4">
+            <table id="candidateTable" class="min-w-full text-sm">
+              <thead class="text-left text-gray-600 dark:text-gray-300 border-b border-gray-200 dark:border-gray-700">
                 <tr>
-                    <th onclick="sortTable(0)">Name</th>
-                    <th onclick="sortTable(1)">Role Fit Score</th>
-                    <th>Skills</th>
-                    <th>Projects</th>
-                    <th onclick="sortTable(4)">Experience (Years)</th>
-                    <th>Education</th>
-                    <th>Filename</th>
-                    <th>Actions</th>
+                  <th class="py-3 px-2">Name</th>
+                  <th class="py-3 px-2">Role Fit</th>
+                  <th class="py-3 px-2">Skills</th>
+                  <th class="py-3 px-2">Projects</th>
+                  <th class="py-3 px-2">Exp (yrs)</th>
+                  <th class="py-3 px-2">Education</th>
+                  <th class="py-3 px-2">File</th>
+                  <th class="py-3 px-2">Actions</th>
                 </tr>
-            </thead>
-            <tbody id="candidateBody"></tbody>
-        </table>
-        <canvas id="fitScoreChart"></canvas>
-        
-        <h2>Export</h2>
-        <button onclick="exportTo('pdf')">Export to PDF</button>
-        <button onclick="exportTo('csv')">Export to CSV</button>
-        
-        <h2>Ask About Candidates</h2>
-        <input type="text" id="chatQuery" placeholder="e.g., Who is the best candidate?">
-        <button onclick="sendChatQuery()">Ask</button>
-        <div id="chatResponse"></div>
+              </thead>
+              <tbody id="candidateBody" class="align-top"></tbody>
+            </table>
+          </div>
+
+          <div class="mt-4 flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
+            <div id="tableInfo">Showing <span id="count">0</span> candidates</div>
+            <div class="flex gap-2">
+              <button id="prevPage" class="px-3 py-1 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-xs hover:bg-gray-100 dark:hover:bg-gray-700">Prev</button>
+              <button id="nextPage" class="px-3 py-1 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-xs hover:bg-gray-100 dark:hover:bg-gray-700">Next</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="p-5 rounded-xl glass shadow-sm">
+          <h3 class="font-semibold">Visualization Score</h3>
+          <div class="w-full h-60">   <!-- fixed height wrapper -->
+            <canvas id="fitScoreChart"></canvas>
+            </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Details modal -->
+    <div id="detailModal" class="fixed inset-0 hidden items-center justify-center z-50">
+      <div class="absolute inset-0 bg-black/50 backdrop-blur-sm"></div>
+      <div class="relative w-full max-w-2xl p-6 bg-white dark:bg-gray-800 rounded-xl glass shadow-lg text-black dark:text-white">
+        <button id="closeModal" class="absolute top-4 right-4 text-gray-500 dark:text-gray-300 hover:text-indigo-500 dark:hover:text-indigo-400">✕</button>
+        <div id="modalContent" class="space-y-4"></div>
+      </div>
     </div>
 
-    <script>
-        let fitScoreChart = null;
-        let candidates = [];
+    <footer class="mt-8 text-xl text-gray-900 dark:text-gray-600 text-center">Powered by Moksh Bhardwaj</footer>
+  </div>
 
-        function toggleDarkMode() {
-            document.body.classList.toggle('dark-mode');
-        }
+  <script>
+    // --- state ---
+    let candidates = [];
+    let page = 0, pageSize = 10;
+    let selectedFiles = [];
 
-        function sortTable(column) {
-            const tbody = document.getElementById('candidateBody');
-            candidates.sort((a, b) => {
-                let aVal = a[column === 0 ? 'name' : column === 1 ? 'role_fit_score' : 'experience_years'] || 0;
-                let bVal = b[column === 0 ? 'name' : column === 1 ? 'role_fit_score' : 'experience_years'] || 0;
-                if (typeof aVal === 'string') {
-                    return column === 0 ? aVal.localeCompare(bVal) : bVal - aVal;
-                }
-                return bVal - aVal;
-            });
-            updateTable(candidates);
-        }
+    // --- utilities ---
+    function el(tag, cls) { const e = document.createElement(tag); if (cls) e.className = cls; return e }
 
-        function updateTable(data) {
-            const tbody = document.getElementById('candidateBody');
-            tbody.innerHTML = '';
-            data.forEach(candidate => {
-                if (candidate.role_fit_score > 0 || Object.keys(candidate.skills || {}).length > 0) {
-                    const row = document.createElement('tr');
-                    row.innerHTML = `
-                        <td>${candidate.name || candidate.Name || 'Unknown'}</td>
-                        <td>${candidate.role_fit_score || 0}</td>
-                        <td>${formatSkills(candidate.skills || candidate.Skills || {})}</td>
-                        <td>${formatProjects(candidate.projects || candidate.Projects || [])}</td>
-                        <td>${candidate.experience_years || 0}</td>
-                        <td>${candidate.education || 'N/A'}</td>
-                        <td>${candidate.filename || 'N/A'}</td>
-                        <td><button onclick="viewDetails('${candidate._id}')">View Details</button></td>
-                    `;
-                    tbody.appendChild(row);
-                }
-            });
-            updateChart(data);
-        }
+    // --- notification ---
+    function notify(text, kind = 'info') {
+      const n = el('div', `fixed bottom-6 right-6 px-4 py-2 rounded-lg shadow-lg text-sm ${kind === 'error' ? 'bg-red-600 text-white' : 'bg-gray-900 dark:bg-indigo-600 text-white'}`);
+      n.textContent = text;
+      document.body.appendChild(n);
+      setTimeout(() => n.classList.add('fade-in'), 10);
+      setTimeout(() => n.remove(), 3500);
+    }
 
-        function formatSkills(skills) {
-            return Object.entries(skills).map(([k, v]) => `${k}: ${v}`).join(', ') || 'None';
-        }
+    // --- theme toggle ---
+    function updateThemeToggle() {
+      const darkToggle = document.getElementById('darkToggle');
+      darkToggle.textContent = document.documentElement.classList.contains('dark') ? 'Light Mode' : 'Dark Mode';
+    }
 
-        function formatProjects(projects) {
-            return projects.map(p => p.title).join(', ') || 'None';
-        }
+    // --- file list management ---
+    function updateFileList() {
+      const fileList = document.getElementById('fileList');
+      fileList.innerHTML = '';
+      selectedFiles.forEach((file, index) => {
+        const row = el('div', 'flex items-center gap-3 mb-2');
+        const label = el('div', 'flex-1 text-sm truncate text-gray-600 dark:text-gray-300'); label.textContent = file.name;
+        const deleteBtn = el('button', 'px-2 py-1 rounded-lg bg-red-500 text-white text-xs hover:bg-red-600');
+        deleteBtn.textContent = 'Delete';
+        deleteBtn.onclick = () => {
+          selectedFiles.splice(index, 1);
+          updateFileList();
+          const fileInput = document.getElementById('fileInput');
+          const dataTransfer = new DataTransfer();
+          selectedFiles.forEach(f => dataTransfer.items.add(f));
+          fileInput.files = dataTransfer.files;
+        };
+        row.append(label); row.append(deleteBtn);
+        fileList.appendChild(row);
+      });
+    }
 
-        function updateChart(data) {
-            const ctx = document.getElementById('fitScoreChart').getContext('2d');
-            const validData = data.filter(c => c.role_fit_score > 0);
-            if (fitScoreChart) {
-                fitScoreChart.destroy();
-            }
-            fitScoreChart = new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: validData.map(c => c.name || c.Name || 'Unknown'),
-                    datasets: [{
-                        label: 'Role Fit Score',
-                        data: validData.map(c => c.role_fit_score || 0),
-                        backgroundColor: 'rgba(75, 192, 192, 0.6)',
-                        borderColor: 'rgba(75, 192, 192, 1)',
-                        borderWidth: 1
-                    }]
-                },
-                options: {
-                    scales: {
-                        y: { beginAtZero: true, max: 100 }
-                    }
-                }
-            });
-        }
+    // --- drag & drop upload ---
+    const dropArea = document.getElementById('dropArea');
+    const fileInput = document.getElementById('fileInput');
 
-        function refreshCandidates() {
-            const jobRole = document.getElementById('jobRole').value;
-            document.getElementById('loading').style.display = 'block';
-            document.getElementById('error').innerHTML = '';
-            fetch(`/candidates?job_role=${encodeURIComponent(jobRole)}`)
-                .then(response => response.json())
-                .then(data => {
-                    document.getElementById('loading').style.display = 'none';
-                    if (data.error) {
-                        document.getElementById('error').innerHTML = `Failed to load candidates: ${data.error}`;
-                        return;
-                    }
-                    candidates = data;
-                    updateTable(data);
-                })
-                .catch(error => {
-                    document.getElementById('loading').style.display = 'none';
-                    document.getElementById('error').innerHTML = `Failed to load candidates: ${error.message}`;
-                });
-        }
+    dropArea.addEventListener('click', () => fileInput.click());
+    dropArea.addEventListener('dragover', (e) => { e.preventDefault(); dropArea.classList.add('ring-2','ring-indigo-400','dark:ring-indigo-500') });
+    dropArea.addEventListener('dragleave', () => { dropArea.classList.remove('ring-2','ring-indigo-400','dark:ring-indigo-500') });
+    dropArea.addEventListener('drop', (e) => {
+      e.preventDefault(); dropArea.classList.remove('ring-2','ring-indigo-400','dark:ring-indigo-500');
+      const dt = e.dataTransfer; if (!dt) return;
+      selectedFiles = [...selectedFiles, ...dt.files].filter(f => ['pdf', 'doc', 'docx'].includes(f.name.split('.').pop().toLowerCase()));
+      fileInput.files = dt.files;
+      updateFileList();
+    });
 
-        function viewDetails(id) {
-            alert(`Details for candidate ID: ${id}`);
-            // TODO: Implement modal or new page for details
-        }
+    fileInput.addEventListener('change', () => {
+      selectedFiles = [...fileInput.files];
+      updateFileList();
+    });
 
-        function exportTo(format) {
-            const jobRole = document.getElementById('jobRole').value;
-            window.location.href = `/export/${format}?job_role=${encodeURIComponent(jobRole)}`;
-        }
+    document.getElementById('clearBtn').addEventListener('click', () => { 
+      selectedFiles = [];
+      fileInput.value = '';
+      document.getElementById('uploadStatus').innerHTML = '';
+      document.getElementById('uploadProgress').innerHTML = '';
+      updateFileList();
+    });
 
-        function sendChatQuery() {
-            const query = document.getElementById('chatQuery').value;
-            if (!query) {
-                document.getElementById('chatResponse').innerHTML = '<span class="error">Please enter a query</span>';
-                return;
-            }
-            fetch('/chat', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ query })
-            })
-                .then(response => response.json())
-                .then(data => {
-                    document.getElementById('chatResponse').innerHTML = data.answer || `<span class="error">${data.error}</span>`;
-                })
-                .catch(error => {
-                    document.getElementById('chatResponse').innerHTML = `<span class="error">Chat error: ${error.message}</span>`;
-                });
-        }
+    // --- upload form ---
+    document.getElementById('uploadForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (selectedFiles.length === 0) return notify('Select at least one file', 'error');
 
-        document.getElementById('uploadForm').addEventListener('submit', function(e) {
-            e.preventDefault();
-            const formData = new FormData(this);
-            fetch('/upload', {
-                method: 'POST',
-                body: formData
-            })
-                .then(response => response.json())
-                .then(data => {
-                    document.getElementById('uploadStatus').innerHTML = data.results.map(r => r.error ? `Error with ${r.filename}: ${r.error}` : `Uploaded ${r.filename}`).join('<br>');
-                    refreshCandidates();
-                })
-                .catch(error => {
-                    document.getElementById('uploadStatus').innerHTML = `<span class="error">Upload error: ${error.message}</span>`;
-                });
+      const jobRole = document.getElementById('jobRole').value;
+      const formData = new FormData();
+      selectedFiles.forEach(file => formData.append('resumes', file));
+      formData.append('job_role', jobRole);
+
+      const progressContainer = document.getElementById('uploadProgress'); progressContainer.innerHTML = '';
+      const uploads = selectedFiles.map(file => {
+        const row = el('div', 'flex items-center gap-3 mb-3');
+        const label = el('div', 'flex-1 text-sm truncate'); label.textContent = file.name;
+        const barWrap = el('div', 'w-40 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden');
+        const bar = el('div', 'h-2 rounded-full bg-indigo-500 progress-bar'); bar.style.width = '0%';
+        barWrap.appendChild(bar);
+        const status = el('div', 'text-xs text-gray-500 dark:text-gray-400 w-24 text-right'); status.textContent = 'Ready';
+        row.append(label); row.append(barWrap); row.append(status);
+        progressContainer.appendChild(row);
+        return { file, bar, status };
+      });
+
+      try {
+        // Simulate progress animation
+        uploads.forEach(u => {
+          u.status.textContent = 'Uploading...';
+          let progress = 0;
+          const interval = setInterval(() => {
+            progress += 10;
+            u.bar.style.width = `${progress}%`;
+            if (progress >= 80) clearInterval(interval);
+          }, 300);
         });
 
-        // Initial load
+        const response = await fetch('/upload', {
+          method: 'POST',
+          body: formData
+        });
+        const result = await response.json();
+        uploads.forEach((u, i) => {
+          u.bar.style.width = '100%';
+          u.status.textContent = result.results[i]?.error || 'Done';
+        });
+        selectedFiles = [];
+        updateFileList();
+        notify('Files uploaded successfully');
         refreshCandidates();
-    </script>
+      } catch (err) {
+        uploads.forEach(u => { u.bar.style.width = '0%'; u.status.textContent = 'Failed'; });
+        notify('Upload failed: ' + err.message, 'error');
+      }
+    });
+
+    // --- table rendering, pagination, search, details modal ---
+    function formatSkills(sk) {
+      if (!sk) return '—';
+      if (Array.isArray(sk)) return sk.join(', ');
+      return Object.entries(sk).map(([k,v]) => `${k} (${v})`).join(', ');
+    }
+
+    function formatProjects(p) {
+      if (!p || p.length === 0) return '—';
+      return p.map(x => x.title || x).slice(0, 3).join(', ');
+    }
+
+    function highlightText(text, query) {
+      if (!query) return text;
+      const regex = new RegExp(`(${query})`, 'gi');
+      return text.replace(regex, '<span class="highlight">$1</span>');
+    }
+
+    function updateTable() {
+      const body = document.getElementById('candidateBody'); body.innerHTML = '';
+      const search = document.getElementById('search').value.toLowerCase().trim();
+      const filtered = candidates.filter(c => {
+        if (!search) return true;
+        const hay = `${c.name} ${(c.skills ? formatSkills(c.skills) : '')} ${(c.projects ? formatProjects(c.projects) : '')}`.toLowerCase();
+        return hay.includes(search);
+      });
+      const start = page * pageSize; const visible = filtered.slice(start, start + pageSize);
+
+      visible.forEach(c => {
+        const tr = el('tr', 'border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800');
+        tr.innerHTML = `
+          <td class="py-3 px-2 font-medium">${highlightText(c.name || 'Unknown', search)}</td>
+          <td class="py-3 px-2">${c.role_fit_score ?? 0}%</td>
+          <td class="py-3 px-2 text-xs text-gray-600 dark:text-gray-300">${highlightText(formatSkills(c.skills), search)}</td>
+          <td class="py-3 px-2 text-xs text-gray-600 dark:text-gray-300">${highlightText(formatProjects(c.projects), search)}</td>
+          <td class="py-3 px-2">${c.experience_years ?? 0}</td>
+          <td class="py-3 px-2">${c.education ?? 'N/A'}</td>
+          <td class="py-3 px-2 text-xs">${c.filename ?? '—'}</td>
+          <td class="py-3 px-2"><button class='px-3 py-1 rounded-lg bg-indigo-600 text-white text-xs hover:bg-indigo-700 dark:hover:bg-indigo-500' data-id='${c._id || ''}'>View</button></td>
+        `;
+        body.appendChild(tr);
+      });
+
+      document.getElementById('count').textContent = filtered.length;
+      body.querySelectorAll('button').forEach(btn => btn.addEventListener('click', (ev) => {
+        const id = btn.getAttribute('data-id'); viewDetails(id);
+      }));
+
+      renderChart();
+    }
+
+    function viewDetails(id) {
+      const c = candidates.find(x => x._id === id) || candidates[0];
+      const modal = document.getElementById('detailModal');
+      const content = document.getElementById('modalContent');
+      content.innerHTML = `
+        <h3 class='text-lg font-semibold mb-3'>${c.name || 'Candidate'}</h3>
+        <p class='text-sm text-gray-600 dark:text-gray-300 mb-2'>Role fit: <strong>${c.role_fit_score ?? 0}%</strong></p>
+        <p class='text-sm text-gray-600 dark:text-gray-300 mb-2'>Skills: ${formatSkills(c.skills)}</p>
+        <p class='text-sm text-gray-600 dark:text-gray-300 mb-2'>Projects: ${formatProjects(c.projects)}</p>
+        <p class='text-sm text-gray-600 dark:text-gray-300 mb-2'>Experience: ${c.experience_years ?? 0} yrs</p>
+        <p class='text-sm text-gray-600 dark:text-gray-300 mb-2'>Education: ${c.education ?? 'N/A'}</p>
+        <p class='text-sm text-gray-600 dark:text-gray-300 mb-2'>File: ${c.filename ?? 'N/A'}</p>
+        <div class='mt-4 flex gap-3'>
+          <button onclick="notify('Action: shortlisting (simulated)')" class='px-4 py-2 rounded-lg bg-emerald-500 text-white text-sm hover:bg-emerald-600 dark:hover:bg-emerald-400'>Shortlist</button>
+          <button onclick="notify('Action: schedule interview (simulated)')" class='px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm hover:bg-indigo-700 dark:hover:bg-indigo-500'>Schedule</button> <span class='text-red-200'>Coming soon</span>
+        </div>
+      `;
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    document.getElementById('closeModal').addEventListener('click', () => {
+      document.getElementById('detailModal').classList.add('hidden');
+      document.getElementById('detailModal').classList.remove('flex');
+    });
+
+    // --- pagination ---
+    document.getElementById('prevPage').addEventListener('click', () => { if (page > 0) { page--; updateTable(); } });
+    document.getElementById('nextPage').addEventListener('click', () => { page++; updateTable(); });
+
+    // --- search ---
+    document.getElementById('search').addEventListener('input', () => { page = 0; updateTable(); });
+
+    // --- refresh with DB clear ---
+    document.getElementById('refreshBtn').addEventListener('click', async () => {
+      if (!confirm('Are you sure you want to delete all candidates?')) return;
+      document.getElementById('loading').classList.remove('hidden');
+      document.getElementById('error').classList.add('hidden');
+      try {
+        const response = await fetch('/clear', { method: 'POST' });
+        if (!response.ok) throw new Error('Failed to clear database');
+        candidates = [];
+        updateTable();
+        notify('Database cleared and candidates refreshed');
+      } catch (err) {
+        document.getElementById('error').classList.remove('hidden');
+        document.getElementById('error').textContent = 'Error: NO CANDIDATES FOUND ' + err.message;
+        notify('Failed to clear database: ' + err.message, 'error');
+      } finally {
+        document.getElementById('loading').classList.add('hidden');
+      }
+    });
+
+    // --- chart rendering ---
+    let chart = null;
+    function renderChart() {
+      const ctx = document.getElementById('fitScoreChart').getContext('2d');
+      const valid = candidates.filter(c => c.role_fit_score != null);
+      const labels = valid.map(c => c.name || 'Unknown');
+      const data = valid.map(c => c.role_fit_score ?? 0);
+      if (chart) chart.destroy();
+      chart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [{
+            label: 'Role Fit (%)',
+            data,
+            backgroundColor: 'rgba(99,102,241,0.6)',
+            borderColor: 'rgba(99,102,241,1)',
+            borderWidth: 1
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            y: { beginAtZero: true, max: 100, grid: { color: 'rgba(0,0,0,0.05)' } },
+            x: { grid: { display: false } }
+          },
+          plugins: { legend: { labels: { color: document.documentElement.classList.contains('dark') ? '#e5e7eb' : '#1f2937' } } }
+        }
+      });
+    }
+
+    // --- chat ---
+    function addChatMessage(text, isUser = false) {
+      const chatMessages = document.getElementById('chatMessages');
+      const message = el('div', `p-3 rounded-lg text-sm ${isUser ? 'bg-indigo-100 dark:bg-indigo-900 ml-8 text-black dark:text-white' : 'bg-gray-100 dark:bg-gray-700 mr-8 text-black dark:text-white'}`);
+      message.innerHTML = text;
+      chatMessages.appendChild(message);
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    document.getElementById('askBtn').addEventListener('click', async () => {
+      const q = document.getElementById('chatQuery').value.trim();
+      if (!q) return notify('Enter a query', 'error');
+      addChatMessage(q, true);
+      document.getElementById('chatQuery').value = '';
+      const loading = el('div', 'skeleton h-12 w-3/4 rounded-lg');
+      document.getElementById('chatMessages').appendChild(loading);
+      try {
+        const response = await fetch('/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query: q })
+        });
+        const result = await response.json();
+        loading.remove();
+        if (result.error) throw new Error(result.error);
+        addChatMessage(result.answer);
+      } catch (err) {
+        loading.remove();
+        addChatMessage('Error: No candidates available');
+        notify('Chat query failed: ' + err.message, 'error');
+      }
+    });
+
+    document.getElementById('chatQuery').addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') document.getElementById('askBtn').click();
+    });
+
+    // --- export ---
+    function exportTo(format) {
+      const jobRole = document.getElementById('jobRole').value;
+      window.location.href = `/export/${format}?job_role=${encodeURIComponent(jobRole)}`;
+    }
+    window.exportTo = exportTo;
+
+    // --- theme toggle ---
+    document.getElementById('darkToggle').addEventListener('click', () => {
+      document.documentElement.classList.toggle('dark');
+      updateThemeToggle();
+      renderChart();
+      notify('Theme toggled');
+    });
+
+    // --- initial fetch ---
+    async function refreshCandidates() {
+      document.getElementById('loading').classList.remove('hidden');
+      document.getElementById('error').classList.add('hidden');
+      try {
+        const jobRole = document.getElementById('jobRole').value;
+        const response = await fetch(`/candidates?job_role=${encodeURIComponent(jobRole)}`);
+        if (!response.ok) throw new Error('Failed to fetch candidates');
+        candidates = await response.json();
+        page = 0;
+        updateTable();
+      } catch (err) {
+        document.getElementById('error').classList.remove('hidden');
+        document.getElementById('error').textContent = 'Error: NO CANDIDATES FOUND ' + err.message;
+        notify('Failed to fetch candidates: ' + err.message, 'error');
+      } finally {
+        document.getElementById('loading').classList.add('hidden');
+      }
+    }
+
+    // first load
+    updateThemeToggle();
+    refreshCandidates();
+  </script>
 </body>
 </html>
