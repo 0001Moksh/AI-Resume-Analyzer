@@ -160,6 +160,10 @@ def convert_objectid_to_str(data):
 def index():
     return render_template("index.html")
 
+@app.route("/health")
+def health():
+    return jsonify({"status": "ok"}), 200
+
 @app.route("/upload", methods=["POST"])
 def upload_resumes():
     if "resumes" not in request.files or "job_role" not in request.form:
@@ -369,4 +373,5 @@ def clear_database():
         return jsonify({"error": f"Failed to clear database: {str(e)}"}), 500
 
 if __name__ == "__main__":
-    app.run(debug=True, use_reloader=False)
+    port = int(os.getenv("PORT", 10000))  # Default to 10000 if PORT is not set
+    app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
