@@ -56,11 +56,28 @@
       <div class="flex items-center gap-3 flex-wrap">
         <label class="flex items-center gap-2 bg-white/90 dark:bg-gray-800/90 glass px-3 py-2 rounded-lg shadow-sm">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-gray-600 dark:text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
-          <select id="jobRole" class="bg-transparent text-sm focus:outline-none text-black dark:text-white">
-            <option>GenAI Engineer</option>
-            <option>LLM Engineer</option>
-            <option>Data Scientist</option>
+          <select id="jobRole" class="bg-black text-sm focus:outline-none text-black dark:text-white">
+              <option selected disabled>Select a job role</option>
+              <option>GenAI Engineer</option>
+              <option>LLM Engineer</option>
+              <option>Data Scientist</option>
+              <option>Data Analyst</option>
+              <option>Business/Data Analytics Engineer</option>
+              <option>AI Engineer / ML Engineer</option>
+              <option>Full-Stack Developer</option>
+              <option>Front-End Developer</option>
+              <option>Back-End Developer</option>
+              <option>Full-Stack AI Developer</option>
+              <option>AI Research Scientist</option>
+              <option>MLOps Engineer</option>
+              <option>Computer Vision Engineer</option>
+              <option>Speech AI Engineer</option>
+              <option>Reinforcement Learning Engineer</option>
+              <option>Quantum ML Engineer</option>
+              <option>BI Engineer / Analyst</option>
+              <option>AI Security Engineer</option>
           </select>
+
         </label>
         <button id="darkToggle" class="px-3 py-2 rounded-lg bg-white/90 dark:bg-gray-800/90 glass shadow-sm text-sm hover:bg-indigo-100 dark:hover:bg-indigo-900"></button>
         <!-- Relocated Export Section -->
@@ -253,9 +270,13 @@
     // --- upload form ---
     document.getElementById('uploadForm').addEventListener('submit', async (e) => {
       e.preventDefault();
+      const jobRole = document.getElementById('jobRole').value;
+      if (!jobRole || jobRole === "Select a job role") {
+        notify('Please select a job role before uploading.', 'error');
+        return;
+      }
       if (selectedFiles.length === 0) return notify('Select at least one file', 'error');
 
-      const jobRole = document.getElementById('jobRole').value;
       const formData = new FormData();
       selectedFiles.forEach(file => formData.append('resumes', file));
       formData.append('job_role', jobRole);
@@ -304,7 +325,30 @@
       }
     });
 
-    // --- table rendering, pagination, search, details modal ---
+    // --- utility to enable/disable buttons based on candidate count ---
+function updateButtonStates() {
+  const count = candidates.length;
+  const disabled = count === 0;
+
+  // Export buttons
+  document.querySelectorAll('button[onclick^="exportTo"]').forEach(btn => {
+    btn.disabled = disabled;
+    if (disabled) {
+      btn.classList.add('bg-gray-300', 'text-gray-500', 'border-gray-300', 'cursor-not-allowed');
+      btn.classList.remove('bg-white', 'dark:bg-gray-800', 'hover:bg-gray-100', 'dark:hover:bg-gray-700');
+    } else {
+      btn.classList.remove('bg-gray-300', 'text-gray-500', 'border-gray-300', 'cursor-not-allowed');
+      btn.classList.add('bg-white', 'dark:bg-gray-800', 'hover:bg-gray-100', 'dark:hover:bg-gray-700');
+    }
+  });
+
+  // Chat, upload, clear, delete all buttons
+  document.getElementById('askBtn').disabled = disabled;
+  document.getElementById('chatQuery').disabled = disabled;
+  document.getElementById('refreshBtn').disabled = disabled;
+}
+
+// --- table rendering, pagination, search, details modal ---
     function formatSkills(sk) {
       if (!sk) return '—';
       if (Array.isArray(sk)) return sk.join(', ');
@@ -352,6 +396,7 @@
         const id = btn.getAttribute('data-id'); viewDetails(id);
       }));
 
+      updateButtonStates(); // <-- Add this line to update button states
       renderChart();
     }
 
@@ -368,8 +413,8 @@
         <p class='text-sm text-gray-600 dark:text-gray-300 mb-2'>Education: ${c.education ?? 'N/A'}</p>
         <p class='text-sm text-gray-600 dark:text-gray-300 mb-2'>File: ${c.filename ?? 'N/A'}</p>
         <div class='mt-4 flex gap-3'>
-          <button onclick="notify('Action: shortlisting (simulated)')" class='px-4 py-2 rounded-lg bg-emerald-500 text-white text-sm hover:bg-emerald-600 dark:hover:bg-emerald-400'>Shortlist</button>
-          <button onclick="notify('Action: schedule interview (simulated)')" class='px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm hover:bg-indigo-700 dark:hover:bg-indigo-500'>Schedule</button> <span class='text-red-200'>Coming soon</span>
+          <button onclick="notify('Action: this feature is coming soon')" class='px-4 py-2 rounded-lg bg-red-500 text-white text-sm hover:bg-red-600 dark:hover:bg-red-400'>Shortlist</button>
+          <button onclick="notify('Action: this feature is coming soon')" class='px-4 py-2 rounded-lg bg-red-500 text-white text-sm hover:bg-red-600 dark:hover:bg-red-400'>Schedule</button> <span class='text-red-200'>Coming soon</span>
         </div>
       `;
       modal.classList.remove('hidden');
@@ -503,10 +548,14 @@
         candidates = await response.json();
         page = 0;
         updateTable();
+        updateButtonStates(); // <-- Add this line to update button states after fetch
       } catch (err) {
         document.getElementById('error').classList.remove('hidden');
         document.getElementById('error').textContent = 'Error: NO CANDIDATES FOUND ' + err.message;
         notify('Failed to fetch candidates: ' + err.message, 'error');
+        candidates = [];
+        updateTable();
+        updateButtonStates(); // <-- Add this line to update button states on error
       } finally {
         document.getElementById('loading').classList.add('hidden');
       }

@@ -7,25 +7,18 @@ import PyPDF2
 import docx2txt
 from pymongo import MongoClient
 from bson.objectid import ObjectId
-from google.generativeai import GenerativeModel
 import google.generativeai as genai
 import json
 from dotenv import load_dotenv
-try:
-    from langchain_community.vectorstores import FAISS
-    from langchain_huggingface import HuggingFaceEmbeddings
-    from langchain.docstore.document import Document
-    FAISS_AVAILABLE = True
-except ImportError:
-    FAISS_AVAILABLE = False
+import time
+import pandas as pd
+import io
 from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet
-import pandas as pd
-import io
 
 # Configure logging
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 # Suppress TensorFlow warnings
@@ -35,40 +28,91 @@ logging.getLogger("tensorflow").setLevel(logging.ERROR)
 
 # Load environment variables
 load_dotenv()
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+if not os.getenv("MONGO_URI") or not os.getenv("GEMINI_API_KEY"):
+    logger.error("Missing MONGO_URI or GEMINI_API_KEY")
+    raise ValueError("Missing required environment variables")
 
 # Initialize Flask app
 app = Flask(__name__)
-
-# MongoDB setup
-client = MongoClient(os.getenv("MONGO_URI"))
-db = client["resume_analyzer"]
-resumes_collection = db["resumes"]
-
-# File upload configuration
-UPLOAD_FOLDER = "uploads"
+app.config["UPLOAD_FOLDER"] = "uploads"
 ALLOWED_EXTENSIONS = {"pdf", "doc", "docx"}
 MAX_UPLOADS = 5
 MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB
-app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
 
-# Initialize Gemini model
-model = GenerativeModel("gemini-1.5-flash")
-
-# Initialize LangChain embeddings
+# Lazy initialization for heavy dependencies
+client = None
+model = None
+embeddings = None
 vector_store = None
-if FAISS_AVAILABLE:
-    embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-    logger.debug("FAISS and embeddings initialized successfully")
-else:
+FAISS_AVAILABLE = False
+try:
+    from langchain_community.vectorstores import FAISS
+    from langchain_huggingface import HuggingFaceEmbeddings
+    from langchain.docstore.document import Document
+    FAISS_AVAILABLE = True
+    logger.debug("FAISS and embeddings modules available")
+except ImportError:
     logger.warning("FAISS not available. Chat functionality will be disabled.")
+
+def init_mongo():
+    global client
+    if client is None:
+        start_time = time.time()
+        client = MongoClient(os.getenv("MONGO_URI"))
+        client.admin.command('ping')  # Test connection
+        logger.debug(f"MongoDB client initialized in {time.time() - start_time:.2f} seconds")
+    return client
+
+def init_gemini():
+    global model
+    if model is None:
+        start_time = time.time()
+        genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+        model = genai.GenerativeModel("gemini-1.5-flash")
+        logger.debug(f"Gemini model initialized in {time.time() - start_time:.2f} seconds")
+    return model
+
+def init_embeddings():
+    global embeddings, vector_store
+    if FAISS_AVAILABLE and embeddings is None:
+        start_time = time.time()
+        embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+        logger.debug(f"Embeddings initialized in {time.time() - start_time:.2f} seconds")
+    return embeddings
+
+# MongoDB setup
+db = None
+resumes_collection = None
+def get_db():
+    global db, resumes_collection
+    if db is None:
+        client = init_mongo()
+        db = client["resume_analyzer"]
+        resumes_collection = db["resumes"]
+        resumes_collection.create_index([("job_role", 1), ("role_fit_score", -1)])
+        logger.debug("Created MongoDB index on job_role and role_fit_score")
+    return resumes_collection
 
 # Role-specific tech stacks
 ROLE_TECH_STACKS = {
-    "GenAI Engineer": "Python, Machine Learning, Deep Learning, Generative AI, GANs, VAEs, TensorFlow, PyTorch, Hugging Face, Cloud Platforms (AWS, GCP, Azure), MLOps, Data Platforms",
-    "LLM Engineer": "Python, NLP, Transformers, LLMs, Hugging Face, LangChain, Fine-tuning, Prompt Engineering, Data Ingestion, Storage, Orchestration, LLMOps",
-    "Data Scientist": "Python, SQL, R, Machine Learning, Statistics, Data Visualization, Pandas, Scikit-learn, TensorFlow, Spark, Databricks, AWS, MongoDB"
+    "Data Scientist": "Python, R, SQL, Machine Learning, Statistics, Data Visualization, Pandas, Scikit-learn, TensorFlow, PyTorch, Spark, Databricks, AWS, MongoDB",
+    "Data Analyst": "SQL, Excel, Python, Power BI, Tableau, Looker, Data Cleaning, Pandas, NumPy, Visualization, Reporting, Dashboards",
+    "Business/Data Analytics Engineer": "Python, SQL, Excel, Power BI, Tableau, ETL, Looker, Data Pipelines, BigQuery, Snowflake, Statistics, Python Dash/Streamlit",
+    "Generative AI Engineer": "Python, Machine Learning, Deep Learning, GANs, VAEs, Transformers, Diffusion Models, PyTorch, TensorFlow, Hugging Face, LangChain, Cloud (AWS/GCP/Azure), MLOps",
+    "AI Engineer / ML Engineer": "Python, Machine Learning, Deep Learning, TensorFlow, PyTorch, Scikit-learn, Pandas, NumPy, Keras, MLOps, Cloud Platforms, Model Deployment, APIs",
+    "Full-Stack Developer": "HTML, CSS, JavaScript, React, Angular, Node.js, Express.js, MongoDB/PostgreSQL, REST APIs, Git, CI/CD, Cloud Hosting (AWS, Azure, GCP)",
+    "Front-End Developer": "HTML, CSS, JavaScript, React, Vue.js, Angular, TailwindCSS, Bootstrap, Responsive Design, UI/UX, Webpack, Vite",
+    "Back-End Developer": "Node.js, Python (Flask/Django/FastAPI), Express.js, REST APIs, GraphQL, SQL/NoSQL, MongoDB, PostgreSQL, CI/CD, Cloud Deployment",
+    "Full-Stack AI Developer": "Python, FastAPI, Flask, Django, React, Node.js, LangChain, Vector Databases (Pinecone, Weaviate, FAISS), OpenAI API, RAG Pipelines, Cloud Functions",
+    "AI Research Scientist": "Python, Deep Learning, Reinforcement Learning, Transformers, PyTorch, JAX, TensorFlow, Algorithm Design, HPC, Research Papers",
+    "MLOps Engineer": "Python, Docker, Kubernetes, CI/CD, MLflow, Airflow, Kubeflow, Terraform, AWS Sagemaker, GCP Vertex AI, Azure ML, Model Deployment, Monitoring",
+    "Computer Vision Engineer": "Python, OpenCV, TensorFlow, PyTorch, YOLO, Detectron2, GANs, Image Segmentation, Video Processing, CUDA, ONNX, Edge AI",
+    "Speech AI Engineer": "Python, ASR, TTS, Whisper, Kaldi, DeepSpeech, Hugging Face Audio Models, Audio Preprocessing, Signal Processing, TorchAudio",
+    "Reinforcement Learning Engineer": "Python, RLlib, Gymnasium, Stable Baselines3, DQN, PPO, Policy Gradients, PyTorch, JAX, Simulators",
+    "Quantum ML Engineer": "Python, Qiskit, PennyLane, Cirq, TensorFlow Quantum, Variational Quantum Circuits, Quantum Annealing, Linear Algebra, Quantum Computing Hardware",
+    "BI Engineer / Analyst": "SQL, Excel, Tableau, Power BI, Python, Pandas, Statistics, ETL, Looker, Data Cleaning, Visualization Best Practices",
+    "AI Security Engineer": "Python, Cryptography, Adversarial ML, Secure Federated Learning, Blockchain, IAM, Zero-Trust, Cloud Security, Cybersecurity + AI tools"
 }
 
 def allowed_file(filename):
@@ -158,14 +202,24 @@ def convert_objectid_to_str(data):
 
 @app.route("/")
 def index():
-    return render_template("index.html")
+    start_time = time.time()
+    logger.debug("Serving index.html")
+    response = render_template("index.html")
+    logger.debug(f"Index route took {time.time() - start_time:.2f} seconds")
+    return response
 
 @app.route("/health")
 def health():
+    logger.debug("Health check accessed")
     return jsonify({"status": "ok"}), 200
 
 @app.route("/upload", methods=["POST"])
 def upload_resumes():
+    start_time = time.time()
+    init_gemini()  # Initialize Gemini only when needed
+    init_embeddings()  # Initialize embeddings only when needed
+    resumes_collection = get_db()
+    
     if "resumes" not in request.files or "job_role" not in request.form:
         logger.error("Missing resumes or job role")
         return jsonify({"error": "Missing resumes or job role"}), 400
@@ -246,14 +300,18 @@ def upload_resumes():
             results.append({"warning": f"Failed to update vector store: {str(e)}"})
     
     results = convert_objectid_to_str(results)
+    logger.debug(f"Upload route took {time.time() - start_time:.2f} seconds")
     return jsonify({"results": results})
 
 @app.route("/candidates", methods=["GET"])
 def get_candidates():
+    start_time = time.time()
+    resumes_collection = get_db()
     job_role = request.args.get("job_role", "GenAI Engineer")
+    limit = int(request.args.get("limit", 50))  # Limit to 50 candidates
     try:
-        candidates = list(resumes_collection.find({"job_role": job_role, "role_fit_score": {"$gt": 0}}))
-        logger.debug(f"Fetched {len(candidates)} candidates for {job_role}")
+        candidates = list(resumes_collection.find({"job_role": job_role, "role_fit_score": {"$gt": 0}}).limit(limit))
+        logger.debug(f"Fetched {len(candidates)} candidates for {job_role} in {time.time() - start_time:.2f} seconds")
         seen_hashes = set()
         unique_candidates = []
         for c in candidates:
@@ -273,6 +331,8 @@ def get_candidates():
 
 @app.route("/export/pdf", methods=["GET"])
 def export_pdf():
+    start_time = time.time()
+    resumes_collection = get_db()
     job_role = request.args.get("job_role", "GenAI Engineer")
     candidates = list(resumes_collection.find({"job_role": job_role, "role_fit_score": {"$gt": 0}}, {"_id": 0}))
     candidates = [normalize_keys(dict(c)) for c in candidates]
@@ -295,11 +355,13 @@ def export_pdf():
     
     doc.build(story)
     buffer.seek(0)
-    logger.debug(f"Generated PDF for {job_role}")
+    logger.debug(f"Generated PDF for {job_role} in {time.time() - start_time:.2f} seconds")
     return send_file(buffer, as_attachment=True, download_name=f"{job_role}_candidates.pdf", mimetype="application/pdf")
 
 @app.route("/export/csv", methods=["GET"])
 def export_csv():
+    start_time = time.time()
+    resumes_collection = get_db()
     job_role = request.args.get("job_role", "GenAI Engineer")
     candidates = list(resumes_collection.find({"job_role": job_role, "role_fit_score": {"$gt": 0}}, {"_id": 0}))
     candidates = [normalize_keys(dict(c)) for c in candidates]
@@ -317,11 +379,14 @@ def export_csv():
     buffer = io.StringIO()
     df.to_csv(buffer, index=False)
     buffer.seek(0)
-    logger.debug(f"Generated CSV for {job_role}")
+    logger.debug(f"Generated CSV for {job_role} in {time.time() - start_time:.2f} seconds")
     return send_file(buffer, as_attachment=True, download_name=f"{job_role}_candidates.csv", mimetype="text/csv")
 
 @app.route("/chat", methods=["POST"])
 def chat():
+    start_time = time.time()
+    init_embeddings()
+    resumes_collection = get_db()
     query = request.json.get("query")
     if not query:
         logger.error("Missing query in chat request")
@@ -348,13 +413,14 @@ def chat():
             return jsonify({"error": "No relevant candidates found"}), 404
         
         data_str = json.dumps(candidate_data)
+        init_gemini()
         prompt = f"""
         Based on candidate data: {data_str}
         Answer the query: {query}
         Be concise and factual. Use role_fit_score, skills, and experience for comparisons.
         """
         response = model.generate_content(prompt)
-        logger.debug(f"Chat response for '{query}': {response.text}")
+        logger.debug(f"Chat response for '{query}': {response.text} in {time.time() - start_time:.2f} seconds")
         return jsonify({"answer": response.text})
     except Exception as e:
         logger.error(f"Chat query failed: {str(e)}")
@@ -362,19 +428,20 @@ def chat():
 
 @app.route("/clear", methods=["POST"])
 def clear_database():
+    start_time = time.time()
+    resumes_collection = get_db()
     try:
         result = resumes_collection.delete_many({})
         global vector_store
         vector_store = None  # Reset vector store
-        logger.debug(f"Cleared {result.deleted_count} records from database")
+        logger.debug(f"Cleared {result.deleted_count} records from database in {time.time() - start_time:.2f} seconds")
         return jsonify({"message": f"Cleared {result.deleted_count} records"}), 200
     except Exception as e:
         logger.error(f"Error clearing database: {str(e)}")
         return jsonify({"error": f"Failed to clear database: {str(e)}"}), 500
 
-
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))  # Default to 10000 for local dev
+    start_time = time.time()
+    port = int(os.environ.get("PORT", 8080))  # Changed default to 8080 for Render compatibility
     app.run(host="0.0.0.0", port=port)
-
-
+    logger.debug(f"Application fully started in {time.time() - start_time:.2f} seconds")
