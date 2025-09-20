@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Resume Analyzer Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            transition: background-color 0.3s, color 0.3s;
+        }
+        .dark-mode {
+            background-color: #1a1a1a;
+            color: #ffffff;
+        }
+        .container {
+            max-width: 1200px;
+            margin: auto;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+            cursor: pointer;
+        }
+        .dark-mode th {
+            background-color: #333;
+        }
+        canvas {
+            max-width: 100%;
+            margin-top: 20px;
+        }
+        .error {
+            color: red;
+            margin-top: 10px;
+        }
+        .loading {
+            display: none;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>AI Resume Analyzer Dashboard</h1>
+        <button onclick="toggleDarkMode()">Toggle Dark Mode</button>
+        
+        <h2>Upload Resumes</h2>
+        <form id="uploadForm" enctype="multipart/form-data">
+            <select name="job_role" id="jobRole">
+                <option value="GenAI Engineer">GenAI Engineer</option>
+                <option value="LLM Engineer">LLM Engineer</option>
+                <option value="Data Scientist">Data Scientist</option>
+            </select>
+            <input type="file" name="resumes" multiple accept=".pdf,.doc,.docx">
+            <button type="submit">Upload Resumes</button>
+        </form>
+        <div id="uploadStatus"></div>
+        
+        <h2>Candidates</h2>
+        <button onclick="refreshCandidates()">Refresh Candidates</button>
+        <div id="loading" class="loading">Loading candidates...</div>
+        <div id="error" class="error"></div>
+        <table id="candidateTable">
+            <thead>
+                <tr>
+                    <th onclick="sortTable(0)">Name</th>
+                    <th onclick="sortTable(1)">Role Fit Score</th>
+                    <th>Skills</th>
+                    <th>Projects</th>
+                    <th onclick="sortTable(4)">Experience (Years)</th>
+                    <th>Education</th>
+                    <th>Filename</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="candidateBody"></tbody>
+        </table>
+        <canvas id="fitScoreChart"></canvas>
+        
+        <h2>Export</h2>
+        <button onclick="exportTo('pdf')">Export to PDF</button>
+        <button onclick="exportTo('csv')">Export to CSV</button>
+        
+        <h2>Ask About Candidates</h2>
+        <input type="text" id="chatQuery" placeholder="e.g., Who is the best candidate?">
+        <button onclick="sendChatQuery()">Ask</button>
+        <div id="chatResponse"></div>
+    </div>
+
+    <script>
+        let fitScoreChart = null;
+        let candidates = [];
+
+        function toggleDarkMode() {
+            document.body.classList.toggle('dark-mode');
+        }
+
+        function sortTable(column) {
+            const tbody = document.getElementById('candidateBody');
+            candidates.sort((a, b) => {
+                let aVal = a[column === 0 ? 'name' : column === 1 ? 'role_fit_score' : 'experience_years'] || 0;
+                let bVal = b[column === 0 ? 'name' : column === 1 ? 'role_fit_score' : 'experience_years'] || 0;
+                if (typeof aVal === 'string') {
+                    return column === 0 ? aVal.localeCompare(bVal) : bVal - aVal;
+                }
+                return bVal - aVal;
+            });
+            updateTable(candidates);
+        }
+
+        function updateTable(data) {
+            const tbody = document.getElementById('candidateBody');
+            tbody.innerHTML = '';
+            data.forEach(candidate => {
+                if (candidate.role_fit_score > 0 || Object.keys(candidate.skills || {}).length > 0) {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${candidate.name || candidate.Name || 'Unknown'}</td>
+                        <td>${candidate.role_fit_score || 0}</td>
+                        <td>${formatSkills(candidate.skills || candidate.Skills || {})}</td>
+                        <td>${formatProjects(candidate.projects || candidate.Projects || [])}</td>
+                        <td>${candidate.experience_years || 0}</td>
+                        <td>${candidate.education || 'N/A'}</td>
+                        <td>${candidate.filename || 'N/A'}</td>
+                        <td><button onclick="viewDetails('${candidate._id}')">View Details</button></td>
+                    `;
+                    tbody.appendChild(row);
+                }
+            });
+            updateChart(data);
+        }
+
+        function formatSkills(skills) {
+            return Object.entries(skills).map(([k, v]) => `${k}: ${v}`).join(', ') || 'None';
+        }
+
+        function formatProjects(projects) {
+            return projects.map(p => p.title).join(', ') || 'None';
+        }
+
+        function updateChart(data) {
+            const ctx = document.getElementById('fitScoreChart').getContext('2d');
+            const validData = data.filter(c => c.role_fit_score > 0);
+            if (fitScoreChart) {
+                fitScoreChart.destroy();
+            }
+            fitScoreChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: validData.map(c => c.name || c.Name || 'Unknown'),
+                    datasets: [{
+                        label: 'Role Fit Score',
+                        data: validData.map(c => c.role_fit_score || 0),
+                        backgroundColor: 'rgba(75, 192, 192, 0.6)',
+                        borderColor: 'rgba(75, 192, 192, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    scales: {
+                        y: { beginAtZero: true, max: 100 }
+                    }
+                }
+            });
+        }
+
+        function refreshCandidates() {
+            const jobRole = document.getElementById('jobRole').value;
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('error').innerHTML = '';
+            fetch(`/candidates?job_role=${encodeURIComponent(jobRole)}`)
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('loading').style.display = 'none';
+                    if (data.error) {
+                        document.getElementById('error').innerHTML = `Failed to load candidates: ${data.error}`;
+                        return;
+                    }
+                    candidates = data;
+                    updateTable(data);
+                })
+                .catch(error => {
+                    document.getElementById('loading').style.display = 'none';
+                    document.getElementById('error').innerHTML = `Failed to load candidates: ${error.message}`;
+                });
+        }
+
+        function viewDetails(id) {
+            alert(`Details for candidate ID: ${id}`);
+            // TODO: Implement modal or new page for details
+        }
+
+        function exportTo(format) {
+            const jobRole = document.getElementById('jobRole').value;
+            window.location.href = `/export/${format}?job_role=${encodeURIComponent(jobRole)}`;
+        }
+
+        function sendChatQuery() {
+            const query = document.getElementById('chatQuery').value;
+            if (!query) {
+                document.getElementById('chatResponse').innerHTML = '<span class="error">Please enter a query</span>';
+                return;
+            }
+            fetch('/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ query })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('chatResponse').innerHTML = data.answer || `<span class="error">${data.error}</span>`;
+                })
+                .catch(error => {
+                    document.getElementById('chatResponse').innerHTML = `<span class="error">Chat error: ${error.message}</span>`;
+                });
+        }
+
+        document.getElementById('uploadForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const formData = new FormData(this);
+            fetch('/upload', {
+                method: 'POST',
+                body: formData
+            })
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('uploadStatus').innerHTML = data.results.map(r => r.error ? `Error with ${r.filename}: ${r.error}` : `Uploaded ${r.filename}`).join('<br>');
+                    refreshCandidates();
+                })
+                .catch(error => {
+                    document.getElementById('uploadStatus').innerHTML = `<span class="error">Upload error: ${error.message}</span>`;
+                });
+        });
+
+        // Initial load
+        refreshCandidates();
+    </script>
+</body>
+</html>
