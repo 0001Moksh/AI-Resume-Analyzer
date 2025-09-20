@@ -56,8 +56,7 @@
       <div class="flex items-center gap-3 flex-wrap">
         <label class="flex items-center gap-2 bg-white/90 dark:bg-gray-800/90 glass px-3 py-2 rounded-lg shadow-sm">
           <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-gray-600 dark:text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
-          <select id="jobRole" class="bg-black text-sm focus:outline-none text-black dark:text-white">
-            <option selected disabled>Select a job role</option>
+          <select id="jobRole" class="bg-transparent text-sm focus:outline-none text-black dark:text-white">
             <option>GenAI Engineer</option>
             <option>LLM Engineer</option>
             <option>Data Scientist</option>
@@ -282,8 +281,8 @@
           const interval = setInterval(() => {
             progress += 10;
             u.bar.style.width = `${progress}%`;
-            if (progress >= 80) clearInterval(interval);
-          }, 300);
+            if (progress >= 90) clearInterval(interval);
+          }, 200);
         });
 
         const response = await fetch('/upload', {
