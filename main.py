@@ -356,5 +356,17 @@ def chat():
         logger.error(f"Chat query failed: {str(e)}")
         return jsonify({"error": f"Chat query failed: {str(e)}"}), 500
 
+@app.route("/clear", methods=["POST"])
+def clear_database():
+    try:
+        result = resumes_collection.delete_many({})
+        global vector_store
+        vector_store = None  # Reset vector store
+        logger.debug(f"Cleared {result.deleted_count} records from database")
+        return jsonify({"message": f"Cleared {result.deleted_count} records"}), 200
+    except Exception as e:
+        logger.error(f"Error clearing database: {str(e)}")
+        return jsonify({"error": f"Failed to clear database: {str(e)}"}), 500
+
 if __name__ == "__main__":
     app.run(debug=True, use_reloader=False)
