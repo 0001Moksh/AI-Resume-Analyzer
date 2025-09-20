@@ -372,7 +372,9 @@ def clear_database():
         logger.error(f"Error clearing database: {str(e)}")
         return jsonify({"error": f"Failed to clear database: {str(e)}"}), 500
 
+
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))  # Render sets PORT
-    app.run(host="0.0.0.0", port=port, debug=True)
+    port = int(os.environ.get("PORT", 10000))  # Default to 10000 for local dev
+    app.run(host="0.0.0.0", port=port)
+
 
