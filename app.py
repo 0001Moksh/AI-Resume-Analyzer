@@ -69,7 +69,7 @@ def init_gemini():
     if model is None:
         start_time = time.time()
         genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-        model = genai.GenerativeModel("gemini-1.5-flash")
+        model = genai.GenerativeModel("gemini-2.0-flash")
         logger.debug(f"Gemini model initialized in {time.time() - start_time:.2f} seconds")
     return model
 
